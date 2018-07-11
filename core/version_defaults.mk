@@ -82,11 +82,11 @@ MAX_PLATFORM_VERSION :=
 # please add that PLATFORM_VERSION as well as clean up obsolete PLATFORM_VERSION's
 # in the following text file:
 # cts/tests/tests/os/assets/platform_versions.txt
-PLATFORM_VERSION.QPR1 := Q
+PLATFORM_VERSION.QPR1 := 10.0.0
 
 # These are the current development codenames, if the build is not a final
 # release build.  If this is a final release build, it is simply "REL".
-PLATFORM_VERSION_CODENAME.QPR1 := Q
+PLATFORM_VERSION_CODENAME.QPR1 := REL
 
 ifndef PLATFORM_VERSION
   PLATFORM_VERSION := $(PLATFORM_VERSION.$(TARGET_PLATFORM_VERSION))
