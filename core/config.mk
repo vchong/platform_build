@@ -86,7 +86,7 @@ $(KATI_obsolete_var PRODUCT_COMPATIBILITY_MATRIX_LEVEL_OVERRIDE,Set FCM Version 
 $(KATI_obsolete_var USE_CLANG_PLATFORM_BUILD,Clang is the only supported Android compiler. See $(CHANGES_URL)#USE_CLANG_PLATFORM_BUILD)
 
 # This is marked as obsolete in envsetup.mk after reading the BoardConfig.mk
-$(KATI_deprecate_export It is a global setting. See $(CHANGES_URL)#export_keyword)
+#$(KATI_deprecate_export It is a global setting. See $(CHANGES_URL)#export_keyword)
 
 CHANGES_URL :=
 

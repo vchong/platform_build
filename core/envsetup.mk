@@ -314,7 +314,7 @@ $(foreach var,$(vars), \
 CHANGES_URL := https://android.googlesource.com/platform/build/+/master/Changes.md
 
 ifneq ($(BUILD_BROKEN_ANDROIDMK_EXPORTS),true)
-$(KATI_obsolete_export It is a global setting. See $(CHANGES_URL)#export_keyword)
+#$(KATI_obsolete_export It is a global setting. See $(CHANGES_URL)#export_keyword)
 endif
 
 CHANGES_URL :=
