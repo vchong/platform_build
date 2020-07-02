@@ -1498,6 +1498,13 @@ ifneq (,$(filter userdataimage, $(MAKECMDGOALS)))
 $(call dist-for-goals, userdataimage, $(BUILT_USERDATAIMAGE_TARGET))
 endif
 
+.PHONY: persistimage
+persistimage: $(INSTALLED_PERSISTIMAGE_TARGET)
+
+ifneq (,$(filter persistimage, $(MAKECMDGOALS)))
+$(call dist-for-goals, persistimage, $(BUILT_PERSISTIMAGE_TARGET))
+endif
+
 .PHONY: cacheimage
 cacheimage: $(INSTALLED_CACHEIMAGE_TARGET)
 
@@ -1552,6 +1559,7 @@ droidcore: $(filter $(HOST_OUT_ROOT)/%,$(modules_to_install)) \
     $(INSTALLED_RECOVERYIMAGE_TARGET) \
     $(INSTALLED_VBMETAIMAGE_TARGET) \
     $(INSTALLED_USERDATAIMAGE_TARGET) \
+    $(INSTALLED_PERSISTIMAGE_TARGET) \
     $(INSTALLED_CACHEIMAGE_TARGET) \
     $(INSTALLED_BPTIMAGE_TARGET) \
     $(INSTALLED_VENDORIMAGE_TARGET) \

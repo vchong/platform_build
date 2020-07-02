@@ -30,6 +30,7 @@ PARSE_TIME_MAKE_GOALS := \
 	fusion \
 	oem_image \
 	online-system-api-sdk-docs \
+	persist \
 	pdk \
 	platform \
 	platform-java \

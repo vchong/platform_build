@@ -402,6 +402,7 @@ $(foreach image, \
     CACHE \
     RAMDISK \
     USERDATA \
+    PERSIST \
     BOOT \
     RECOVERY, \
   $(eval $(call product-build-image-config,$(image))))

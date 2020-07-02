@@ -1024,6 +1024,7 @@ license_modules_rehomed += $(filter $(PRODUCT_OUT)/data/%,$(license_modules_rest
 license_modules_rehomed += $(filter $(PRODUCT_OUT)/ramdisk/%,$(license_modules_rest))
 license_modules_rehomed += $(filter $(PRODUCT_OUT)/debug_ramdisk/%,$(license_modules_rest))
 license_modules_rehomed += $(filter $(PRODUCT_OUT)/vendor-ramdisk/%,$(license_modules_rest))
+# TODO: vvc
 license_modules_rehomed += $(filter $(PRODUCT_OUT)/persist/%,$(license_modules_rest))
 license_modules_rehomed += $(filter $(PRODUCT_OUT)/persist.img,$(license_modules_rest))
 license_modules_rehomed += $(filter $(PRODUCT_OUT)/system_other/%,$(license_modules_rest))
@@ -1207,7 +1208,7 @@ endif
 endif # PRODUCT_USE_DYNAMIC_PARTITIONS
 
 # $(1): the path of the output dictionary file
-# $(2): a subset of "system vendor cache userdata product system_ext oem odm"
+# $(2): a subset of "system vendor cache userdata persist product system_ext oem odm"
 # $(3): additional "key=value" pairs to append to the dictionary file.
 define generate-image-prop-dictionary
 $(if $(filter $(2),system),\
@@ -1237,6 +1238,14 @@ $(if $(filter $(2),userdata),\
     $(if $(PRODUCT_QUOTA_PROJID),$(hide) echo "needs_projid=$(PRODUCT_QUOTA_PROJID)" >> $(1))
     $(hide) echo "userdata_selinux_fc=$(SELINUX_FC)" >> $(1)
     $(hide) echo "building_userdata_image=$(BUILDING_USERDATA_IMAGE)" >> $(1)
+)
+$(if $(filter $(2),persist),\
+    $(if $(BOARD_PERSISTIMAGE_FILE_SYSTEM_TYPE),$(hide) echo "persist_fs_type=$(BOARD_PERSISTIMAGE_FILE_SYSTEM_TYPE)" >> $(1))
+    $(if $(BOARD_PERSISTIMAGE_PARTITION_SIZE),$(hide) echo "persist_size=$(BOARD_PERSISTIMAGE_PARTITION_SIZE)" >> $(1))
+    $(if $(PRODUCT_FS_CASEFOLD),$(hide) echo "needs_casefold=$(PRODUCT_FS_CASEFOLD)" >> $(1))
+    $(if $(PRODUCT_QUOTA_PROJID),$(hide) echo "needs_projid=$(PRODUCT_QUOTA_PROJID)" >> $(1))
+    $(hide) echo "persist_selinux_fc=$(SELINUX_FC)" >> $(1)
+    $(hide) echo "building_persist_image=$(BUILDING_PERSIST_IMAGE)" >> $(1)
 )
 $(if $(filter $(2),cache),\
     $(if $(BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE),$(hide) echo "cache_fs_type=$(BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE)" >> $(1))
@@ -1401,6 +1410,9 @@ ifdef BUILDING_SYSTEM_OTHER_IMAGE
 endif
 ifdef BUILDING_USERDATA_IMAGE
   PROP_DICTIONARY_IMAGES += userdata
+endif
+ifdef BUILDING_PERSIST_IMAGE
+  PROP_DICTIONARY_IMAGES += persist
 endif
 ifdef BUILDING_VENDOR_IMAGE
   PROP_DICTIONARY_IMAGES += vendor
@@ -2439,7 +2451,7 @@ endif
 endif # BUILD_PLATFORM_ZIP
 
 # -----------------------------------------------------------------
-# data partition image
+# userdata partition image
 INTERNAL_USERDATAIMAGE_FILES := \
     $(filter $(TARGET_OUT_DATA)/%,$(ALL_DEFAULT_INSTALLED_MODULES))
 
@@ -2474,6 +2486,43 @@ userdataimage-nodeps: | $(INTERNAL_USERIMAGES_DEPS)
 
 endif # BUILDING_USERDATA_IMAGE
 
+# -----------------------------------------------------------------
+# nvme partition image
+# persist partition image
+INTERNAL_PERSISTIMAGE_FILES := \
+    $(filter $(TARGET_OUT_DATA)/%,$(ALL_DEFAULT_INSTALLED_MODULES))
+
+ifdef BUILDING_PERSIST_IMAGE
+persistimage_intermediates := \
+    $(call intermediates-dir-for,PACKAGING,persist)
+BUILT_PERSISTIMAGE_TARGET := $(PRODUCT_OUT)/persist.img
+
+define build-persistimage-target
+  $(call pretty,"Target persist fs image: $(INSTALLED_PERSISTIMAGE_TARGET)")
+  @mkdir -p $(TARGET_OUT_DATA)
+  @mkdir -p $(persistimage_intermediates) && rm -rf $(persistimage_intermediates)/persist_image_info.txt
+  $(call generate-image-prop-dictionary, $(persistimage_intermediates)/persist_image_info.txt,persist,skip_fsck=true)
+  PATH=$(INTERNAL_USERIMAGES_BINARY_PATHS):$$PATH \
+      $(BUILD_IMAGE) \
+          $(TARGET_OUT_DATA) $(persistimage_intermediates)/persist_image_info.txt \
+          $(INSTALLED_PERSISTIMAGE_TARGET) $(TARGET_OUT)
+  $(call assert-max-image-size,$(INSTALLED_PERSISTIMAGE_TARGET),$(BOARD_PERSISTIMAGE_PARTITION_SIZE))
+endef
+
+# We just build this directly to the install location.
+INSTALLED_PERSISTIMAGE_TARGET := $(BUILT_PERSISTIMAGE_TARGET)
+INSTALLED_PERSISTIMAGE_TARGET_DEPS := \
+    $(INTERNAL_USERIMAGES_DEPS) \
+    $(INTERNAL_PERSISTIMAGE_FILES)
+$(INSTALLED_PERSISTIMAGE_TARGET): $(INSTALLED_PERSISTIMAGE_TARGET_DEPS)
+	$(build-persistimage-target)
+
+.PHONY: persistimage-nodeps
+persistimage-nodeps: | $(INTERNAL_USERIMAGES_DEPS)
+	$(build-persistimage-target)
+
+endif # BUILDING_PERSIST_IMAGE
+
 # ASAN libraries in the system image - build rule.
 ASAN_OUT_DIRS_FOR_SYSTEM_INSTALL := $(sort $(patsubst $(PRODUCT_OUT)/%,%,\
   $(TARGET_OUT_SHARED_LIBRARIES) \
@@ -2484,7 +2533,7 @@ ASAN_OUT_DIRS_FOR_SYSTEM_INSTALL := $(sort $(patsubst $(PRODUCT_OUT)/%,%,\
 ASAN_SYSTEM_INSTALL_OPTIONS := --owner=1000 --group=1000
 # Note: experimentally, it seems not worth it to try to get "best" compression. We don't save
 #       enough space.
-$(ASAN_IN_SYSTEM_INSTALLED): $(INSTALLED_USERDATAIMAGE_TARGET_DEPS)
+$(ASAN_IN_SYSTEM_INSTALLED): $(INSTALLED_USERDATAIMAGE_TARGET_DEPS) $(INSTALLED_PERSISTIMAGE_TARGET_DEPS)
 	tar cfj $(ASAN_IN_SYSTEM_INSTALLED) $(ASAN_SYSTEM_INSTALL_OPTIONS) -C $(TARGET_OUT_DATA)/.. $(ASAN_OUT_DIRS_FOR_SYSTEM_INSTALL) >/dev/null
 
 # -----------------------------------------------------------------
@@ -3848,6 +3897,10 @@ ifneq (,$(filter address, $(SANITIZE_TARGET)))
 	# We need to create userdata.img with real data because the instrumented libraries are in userdata.img.
 	$(hide) echo "userdata_img_with_data=true" >> $@
 endif
+ifneq (,$(filter address, $(SANITIZE_TARGET)))
+	# We need to create persist.img with real data because the instrumented libraries are in persist.img.
+	$(hide) echo "persist_img_with_data=true" >> $@
+endif
 ifeq ($(BOARD_USES_FULL_RECOVERY_IMAGE),true)
 	$(hide) echo "full_recovery_image=true" >> $@
 endif
@@ -4113,6 +4166,7 @@ $(BUILT_TARGET_FILES_PACKAGE): \
 	    $(INSTALLED_RADIOIMAGE_TARGET) \
 	    $(INSTALLED_RECOVERYIMAGE_TARGET) \
 	    $(INSTALLED_USERDATAIMAGE_TARGET) \
+	    $(INSTALLED_PERSISTIMAGE_TARGET) \
 	    $(INSTALLED_CACHEIMAGE_TARGET) \
 	    $(INSTALLED_VENDORIMAGE_TARGET) \
 	    $(INSTALLED_PRODUCTIMAGE_TARGET) \
@@ -4247,7 +4301,12 @@ ifdef BUILDING_SYSTEM_IMAGE
 	    $(SYSTEMIMAGE_SOURCE_DIR),$(zip_root)/SYSTEM)
 endif
 ifdef BUILDING_USERDATA_IMAGE
-	@# Contents of the data image
+	@# Contents of the userdata image
+	$(hide) $(call package_files-copy-root, \
+	    $(TARGET_OUT_DATA),$(zip_root)/DATA)
+endif
+ifdef BUILDING_PERSIST_IMAGE
+	@# Contents of the persist image
 	$(hide) $(call package_files-copy-root, \
 	    $(TARGET_OUT_DATA),$(zip_root)/DATA)
 endif
@@ -4517,6 +4576,7 @@ $(APPCOMPAT_ZIP): $(INSTALLED_SYSTEMIMAGE_TARGET) \
 	    $(INSTALLED_RAMDISK_TARGET) \
 	    $(INSTALLED_BOOTIMAGE_TARGET) \
 	    $(INSTALLED_USERDATAIMAGE_TARGET) \
+	    $(INSTALLED_PERSISTIMAGE_TARGET) \
 	    $(INSTALLED_VENDORIMAGE_TARGET) \
 	    $(INSTALLED_PRODUCTIMAGE_TARGET) \
 	    $(INSTALLED_SYSTEM_EXTIMAGE_TARGET)
@@ -4546,6 +4606,7 @@ $(SYMBOLS_ZIP): $(INSTALLED_SYSTEMIMAGE_TARGET) \
 	    $(INSTALLED_RAMDISK_TARGET) \
 	    $(INSTALLED_BOOTIMAGE_TARGET) \
 	    $(INSTALLED_USERDATAIMAGE_TARGET) \
+	    $(INSTALLED_PERSISTIMAGE_TARGET) \
 	    $(INSTALLED_VENDORIMAGE_TARGET) \
 	    $(INSTALLED_PRODUCTIMAGE_TARGET) \
 	    $(INSTALLED_SYSTEM_EXTIMAGE_TARGET) \
@@ -4572,6 +4633,7 @@ $(COVERAGE_ZIP): $(INSTALLED_SYSTEMIMAGE_TARGET) \
 	    $(INSTALLED_RAMDISK_TARGET) \
 	    $(INSTALLED_BOOTIMAGE_TARGET) \
 	    $(INSTALLED_USERDATAIMAGE_TARGET) \
+	    $(INSTALLED_PERSISTIMAGE_TARGET) \
 	    $(INSTALLED_VENDORIMAGE_TARGET) \
 	    $(INSTALLED_PRODUCTIMAGE_TARGET) \
 	    $(INSTALLED_SYSTEM_EXTIMAGE_TARGET) \
@@ -4648,6 +4710,7 @@ $(PROGUARD_DICT_ZIP): \
     $(INSTALLED_RAMDISK_TARGET) \
     $(INSTALLED_BOOTIMAGE_TARGET) \
     $(INSTALLED_USERDATAIMAGE_TARGET) \
+    $(INSTALLED_PERSISTIMAGE_TARGET) \
     $(INSTALLED_VENDORIMAGE_TARGET) \
     $(INSTALLED_PRODUCTIMAGE_TARGET) \
     $(INSTALLED_SYSTEM_EXTIMAGE_TARGET) \
@@ -4909,7 +4972,8 @@ INTERNAL_EMULATOR_PACKAGE_FILES += \
         prebuilts/qemu-kernel/$(TARGET_ARCH)/kernel-qemu \
         $(INSTALLED_RAMDISK_TARGET) \
         $(INSTALLED_SYSTEMIMAGE_TARGET) \
-        $(INSTALLED_USERDATAIMAGE_TARGET)
+        $(INSTALLED_USERDATAIMAGE_TARGET) \
+        $(INSTALLED_PERSISTIMAGE_TARGET)
 
 name := $(TARGET_PRODUCT)-emulator-$(FILE_NAME_TAG)
 
@@ -5003,6 +5067,7 @@ deps := \
 	$(INSTALLED_QEMU_VENDORIMAGE) \
 	$(QEMU_VERIFIED_BOOT_PARAMS) \
 	$(INSTALLED_USERDATAIMAGE_TARGET) \
+	$(INSTALLED_PERSISTIMAGE_TARGET) \
 	$(INSTALLED_RAMDISK_TARGET) \
 	$(INSTALLED_SDK_BUILD_PROP_TARGET) \
 	$(INSTALLED_BUILD_PROP_TARGET) \
